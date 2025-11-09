@@ -52,6 +52,18 @@ async function run() {
       res.send(result);
     });
 
+    // update model api
+    app.put("/update-model/:id", async (req, res) => {
+      const id = req.params.id;
+      const data = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: data,
+      };
+      const result = await ModelCollection.updateOne(query, update);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
     console.log(
