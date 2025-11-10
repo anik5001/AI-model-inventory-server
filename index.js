@@ -30,6 +30,7 @@ async function run() {
     const db = client.db("ai-model-inventory-db");
 
     const ModelCollection = db.collection("models");
+    const PurchasedCollection = db.collection("purchased-models");
 
     app.get("/models", async (req, res) => {
       const result = await ModelCollection.find().toArray();
@@ -77,6 +78,33 @@ async function run() {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ModelCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // purchased model add to db api
+
+    app.post("/purchased-models/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const data = req.body;
+      const result = await PurchasedCollection.insertOne(data);
+
+      const purchasedCount = {
+        $inc: { purchased: 1 },
+      };
+      const updatedPurchased = await ModelCollection.updateOne(
+        query,
+        purchasedCount
+      );
+      res.send(result);
+    });
+    // purchased model get api
+    app.get("/my-purchased-models", async (req, res) => {
+      const email = req.query.email;
+
+      const result = await PurchasedCollection.find({
+        purchasedBy: email,
+      }).toArray();
       res.send(result);
     });
 
