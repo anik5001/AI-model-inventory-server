@@ -36,6 +36,16 @@ async function run() {
       const result = await ModelCollection.find().toArray();
       res.send(result);
     });
+    // latest 6 ai model card
+    app.get("/latest-models", async (req, res) => {
+      const result = await ModelCollection.find()
+        .sort({
+          createdAt: -1,
+        })
+        .limit(6)
+        .toArray();
+      res.send(result);
+    });
 
     // details model api
 
