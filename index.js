@@ -2,13 +2,17 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-
+const admin = require("firebase-admin");
+const serviceAccount = require("./serviceKeyAdminSDK.json");
 const app = express();
-
 const port = process.env.PORT || 3000;
 // middleWare
 app.use(cors());
 app.use(express.json());
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 app.get("/", (req, res) => {
   res.send("server is running");
@@ -23,6 +27,31 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const verifyToken = async (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization) {
+    return res.status(401).send({
+      message: "unauthorized access",
+    });
+  }
+  const token = authorization.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({
+      message: "unauthorized access",
+    });
+  }
+  try {
+    const userInfo = await admin.auth().verifyIdToken(token);
+    req.token_email = userInfo.email;
+    // console.log(userInfo.email);
+    next();
+  } catch (error) {
+    res.status(401).send({
+      message: "unauthorized access",
+    });
+  }
+};
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -49,7 +78,7 @@ async function run() {
 
     // details model api
 
-    app.get("/models/:id", async (req, res) => {
+    app.get("/models/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ModelCollection.findOne(query);
@@ -57,14 +86,14 @@ async function run() {
     });
 
     // add new model api
-    app.post("/models", async (req, res) => {
+    app.post("/models", verifyToken, async (req, res) => {
       const data = req.body;
       const result = await ModelCollection.insertOne(data);
       res.send(result);
     });
 
     // update model api
-    app.put("/update-model/:id", async (req, res) => {
+    app.put("/update-model/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const data = req.body;
       const query = { _id: new ObjectId(id) };
@@ -77,14 +106,21 @@ async function run() {
 
     // my models api
 
-    app.get("/my-models", async (req, res) => {
+    app.get("/my-models", verifyToken, async (req, res) => {
       const email = req.query.email;
+      // console.log(req.token_email);
+      if (req.token_email !== email) {
+        return res.status(403).send({
+          message: " Forbidden Access",
+        });
+      }
       const result = await ModelCollection.find({ createdBy: email }).toArray();
       res.send(result);
     });
 
     // delete APi
-    app.delete("/models/:id", async (req, res) => {
+    app.delete("/models/:id", verifyToken, async (req, res) => {
+      // console.log("delete");
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await ModelCollection.deleteOne(query);
@@ -93,7 +129,7 @@ async function run() {
 
     // purchased model add to db api
 
-    app.post("/purchased-models/:id", async (req, res) => {
+    app.post("/purchased-models/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const data = req.body;
@@ -106,11 +142,14 @@ async function run() {
         query,
         purchasedCount
       );
-      res.send(result);
+      res.send(result, updatedPurchased);
     });
     // purchased model get api
-    app.get("/my-purchased-models", async (req, res) => {
+    app.get("/my-purchased-models", verifyToken, async (req, res) => {
       const email = req.query.email;
+      if (req.token_email !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
 
       const result = await PurchasedCollection.find({
         purchasedBy: email,
@@ -123,6 +162,15 @@ async function run() {
       const searchText = req.query.search;
       const result = await ModelCollection.find({
         name: { $regex: searchText, $options: "i" },
+      }).toArray();
+      res.send(result);
+    });
+    // filter api
+
+    app.get("/filter", async (req, res) => {
+      const searchText = req.query.framework;
+      const result = await ModelCollection.find({
+        framework: { $regex: searchText, $options: "i" },
       }).toArray();
       res.send(result);
     });
